@@ -15,7 +15,9 @@ open Shared
 // in this case, we are keeping track of a counter
 // we mark it as optional, because initially it will not be available from the client
 // the initial value will be requested from server
-type Model = { Counter: Counter option }
+type Model = {
+        Counter: Counter option
+        Konten: Konto list }
 
 // The Msg type defines what events/actions can occur while the application is running
 // the state of the application changes *only* in reaction to these events
@@ -23,12 +25,17 @@ type Msg =
     | Increment
     | Decrement
     | InitialCountLoaded of Counter
+    | GetKonten
+    | KontenLoaded of Konto list
 
 let initialCounter () = Fetch.fetchAs<Counter> "/api/init"
 
+// Funktioniert nicht :(
+let getKonten() = Fetch.fetchAs<Konto list> ("http://safestacktest.azurewebsites.net/konten", [ RequestProperties.Mode RequestMode.Nocors ])
+
 // defines the initial state and initial command (= side-effect) of the application
 let init () : Model * Cmd<Msg> =
-    let initialModel = { Counter = None }
+    let initialModel = { Counter = None; Konten = [] }
     let loadCountCmd =
         Cmd.OfPromise.perform initialCounter () InitialCountLoaded
     initialModel, loadCountCmd
@@ -45,10 +52,13 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
         let nextModel = { currentModel with Counter = Some { Value = counter.Value - 1 } }
         nextModel, Cmd.none
     | _, InitialCountLoaded initialCount->
-        let nextModel = { Counter = Some initialCount }
+        let nextModel = { currentModel with Counter = Some initialCount }
+        nextModel, Cmd.none
+    | _, GetKonten -> currentModel, Cmd.OfPromise.perform getKonten () KontenLoaded
+    | _, KontenLoaded konten ->
+        let nextModel = { currentModel with Konten = konten }
         nextModel, Cmd.none
     | _ -> currentModel, Cmd.none
-
 
 let safeComponents =
     let components =
@@ -97,6 +107,11 @@ let view (model : Model) (dispatch : Msg -> unit) =
                 Columns.columns []
                     [ Column.column [] [ button "-" (fun _ -> dispatch Decrement) ]
                       Column.column [] [ button "+" (fun _ -> dispatch Increment) ] ] ]
+
+          Container.container [ Container.IsFluid ]
+            [ Content.content [ ]
+                [ Button.button [ Button.OnClick (fun _ -> dispatch GetKonten) ]
+                    [ str ("Get Konten (" + model.Konten.Length.ToString() + ")") ] ] ]
 
           Footer.footer [ ]
                 [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
