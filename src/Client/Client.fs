@@ -10,112 +10,67 @@ open Fulma
 open Thoth.Json
 
 open Shared
+open ServiceClient
 
-// The model holds data that you want to keep track of while the application is running
-// in this case, we are keeping track of a counter
-// we mark it as optional, because initially it will not be available from the client
-// the initial value will be requested from server
-type Model = {
-        Counter: Counter option
-        Konten: Konto list }
+type Model =
+    { Konten: Konto list }
 
-// The Msg type defines what events/actions can occur while the application is running
-// the state of the application changes *only* in reaction to these events
 type Msg =
-    | Increment
-    | Decrement
-    | InitialCountLoaded of Counter
     | GetKonten
-    | KontenLoaded of Konto list
+    | GetKontenFinished of Konto list
+    | AddKonto of Konto
 
-let initialCounter () = Fetch.fetchAs<Counter> "/api/init"
+let init(): Model * Cmd<Msg> = { Konten = [] }, Cmd.none
 
-// Funktioniert nicht :(
-let getKonten() = Fetch.fetchAs<Konto list> ("http://safestacktest.azurewebsites.net/konten", [ RequestProperties.Mode RequestMode.Nocors ])
-
-// defines the initial state and initial command (= side-effect) of the application
-let init () : Model * Cmd<Msg> =
-    let initialModel = { Counter = None; Konten = [] }
-    let loadCountCmd =
-        Cmd.OfPromise.perform initialCounter () InitialCountLoaded
-    initialModel, loadCountCmd
-
-// The update function computes the next state of the application based on the current state and the incoming events/messages
-// It can also run side-effects (encoded as commands) like calling the server via Http.
-// these commands in turn, can dispatch messages to which the update function will react.
-let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
-    match currentModel.Counter, msg with
-    | Some counter, Increment ->
-        let nextModel = { currentModel with Counter = Some { Value = counter.Value + 1 } }
-        nextModel, Cmd.none
-    | Some counter, Decrement ->
-        let nextModel = { currentModel with Counter = Some { Value = counter.Value - 1 } }
-        nextModel, Cmd.none
-    | _, InitialCountLoaded initialCount->
-        let nextModel = { currentModel with Counter = Some initialCount }
-        nextModel, Cmd.none
-    | _, GetKonten -> currentModel, Cmd.OfPromise.perform getKonten () KontenLoaded
-    | _, KontenLoaded konten ->
+let update (msg: Msg) (currentModel: Model): Model * Cmd<Msg> =
+    match msg with
+    | GetKonten -> currentModel, Cmd.OfPromise.perform ServiceClient.getKonten () GetKontenFinished
+    | GetKontenFinished konten ->
         let nextModel = { currentModel with Konten = konten }
         nextModel, Cmd.none
-    | _ -> currentModel, Cmd.none
+    | AddKonto konto ->
+        currentModel, Cmd.OfPromise.perform ServiceClient.addKonto konto (fun _ -> GetKonten)
 
-let safeComponents =
-    let components =
-        span [ ]
-           [ a [ Href "https://github.com/SAFE-Stack/SAFE-template" ]
-               [ str "SAFE  "
-                 str Version.template ]
-             str ", "
-             a [ Href "https://saturnframework.github.io" ] [ str "Saturn" ]
-             str ", "
-             a [ Href "http://fable.io" ] [ str "Fable" ]
-             str ", "
-             a [ Href "https://elmish.github.io" ] [ str "Elmish" ]
-             str ", "
-             a [ Href "https://fulma.github.io/Fulma" ] [ str "Fulma" ]
+let getKontenTable (konten:Konto list) =
+    Table.table [ Table.IsHoverable ]
+            [ thead [ ]
+                [ tr [ ]
+                    [ th [ ] [ str "ID" ]
+                      th [ ] [ str "Name" ]
+                      th [ ] [ str "AppId" ]
+                      th [ ] [ str "DevId" ]
+                      th [ ] [ str "CertId" ] ] ]
+              tbody [ ]
+                [
+                  for konto in konten do
+                    tr [ ]
+                     [ td [ ] [ str (konto.Id.ToString()) ]
+                       td [ ] [ str konto.Name ]
+                       td [ ] [ str konto.AppId ]
+                       td [ ] [ str konto.DevId ]
+                       td [ ] [ str konto.CertId ] ]
+                       ] ]
 
-           ]
-
-    span [ ]
-        [ str "Version "
-          strong [ ] [ str Version.app ]
-          str " powered by: "
-          components ]
-
-let show = function
-    | { Counter = Some counter } -> string counter.Value
-    | { Counter = None   } -> "Loading..."
-
-let button txt onClick =
-    Button.button
-        [ Button.IsFullWidth
-          Button.Color IsPrimary
-          Button.OnClick onClick ]
-        [ str txt ]
-
-let view (model : Model) (dispatch : Msg -> unit) =
+let view (model: Model) (dispatch: Msg -> unit) =
     div []
-        [ Navbar.navbar [ Navbar.Color IsPrimary ]
-            [ Navbar.Item.div [ ]
-                [ Heading.h2 [ ]
-                    [ str "SAFE Template" ] ] ]
+        [
 
-          Container.container []
-              [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
-                    [ Heading.h3 [] [ str ("Press buttons to manipulate counter: " + show model) ] ]
-                Columns.columns []
-                    [ Column.column [] [ button "-" (fun _ -> dispatch Decrement) ]
-                      Column.column [] [ button "+" (fun _ -> dispatch Increment) ] ] ]
+          getKontenTable model.Konten
 
           Container.container [ Container.IsFluid ]
-            [ Content.content [ ]
-                [ Button.button [ Button.OnClick (fun _ -> dispatch GetKonten) ]
-                    [ str ("Get Konten (" + model.Konten.Length.ToString() + ")") ] ] ]
-
-          Footer.footer [ ]
-                [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
-                    [ safeComponents ] ] ]
+              [ Content.content []
+                    [ Button.button [ Button.OnClick(fun _ -> dispatch GetKonten) ] [ str ("Get Konten") ] ] ]
+          Container.container [ Container.IsFluid ]
+              [ Content.content []
+                    [ Button.button
+                        [ Button.OnClick(fun _ ->
+                            dispatch
+                                (AddKonto
+                                    { Id = 0
+                                      Name = "Test"
+                                      AppId = "A"
+                                      DevId = "B"
+                                      CertId = "C" })) ] [ str ("Add Konto") ] ] ] ]
 
 #if DEBUG
 open Elmish.Debug
