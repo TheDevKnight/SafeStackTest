@@ -5,7 +5,7 @@ open Shared
 
 let getUrl url = sprintf "https://safestacktest.azurewebsites.net/%s" url
 
-let getKonten() = Fetch.fetchAs<Konto list> (getUrl "konten")
+let getKonten () = Fetch.fetchAs<Konto list> (getUrl "konten")
 
 // : Fable.Core.JS.Promise<Konto>
 // let addKonto  (konto:Konto) = Fetch.post<unit> ((getUrl "konten"), konto) |> ignore
